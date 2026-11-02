@@ -56,6 +56,12 @@ export interface ReaderPrefs {
   outlineTab: "toc" | "marks" | "notes";
 }
 
+/**
+ * Settings kept per paper: a paper opened for the first time takes the current defaults, and from
+ * then on keeps its own. The rest (theme, engine, pair mark, ...) is one setting for all papers.
+ */
+export const PAPER_PREF_KEYS = ["mode", "granularity", "fontSize", "peek", "rich", "source", "outline", "outlineTab"] as const satisfies readonly (keyof ReaderPrefs)[];
+
 /** A place in the paper the reader marked. */
 export interface Bookmark {
   blockId: string;

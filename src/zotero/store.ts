@@ -6,7 +6,7 @@
 // engine configuration, prompt version and glossary it was made with, and the reader's
 // "retranslate" action replaces it with the current engine's output.
 
-import type { Bookmark } from "../../core/host-api";
+import type { Bookmark, ReaderPrefs } from "../../core/host-api";
 import { PROMPT_VERSION } from "../../core/translate/protocol";
 import { clearTimeout, setTimeout } from "./globals";
 
@@ -29,6 +29,8 @@ interface CacheFile {
   position?: string;
   /** The reader's bookmarks in this paper. */
   bookmarks?: Bookmark[];
+  /** View settings of this paper (mode, font size, ...), fixed at its first opening. */
+  prefs?: Partial<ReaderPrefs>;
   /** Key terms of this paper (English = 中文 lines), made once before batch translation. */
   glossary?: string;
 }
@@ -86,6 +88,7 @@ export class TranslationStore {
         changed = true;
       }
       if (this.data.position === undefined && raw.position) this.data.position = raw.position;
+      if (this.data.prefs === undefined && raw.prefs) this.data.prefs = raw.prefs;
       this.mtime = m;
       if (changed) this.rev++;
       return changed;
@@ -203,6 +206,16 @@ export class TranslationStore {
 
   set bookmarks(list: Bookmark[]) {
     this.data.bookmarks = list;
+    this.scheduleWrite();
+  }
+
+  get prefs(): Partial<ReaderPrefs> | undefined {
+    return this.data.prefs;
+  }
+
+  set prefs(p: Partial<ReaderPrefs> | undefined) {
+    if (JSON.stringify(this.data.prefs) === JSON.stringify(p)) return;
+    this.data.prefs = p;
     this.scheduleWrite();
   }
 

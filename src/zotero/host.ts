@@ -1,7 +1,7 @@
 // ZbrHost implementation backed by Zotero: SDT document, translation scheduler, cache, MinerU.
 
 import { buildDocument } from "../../core/build";
-import { DEFAULT_PREFS, type DocSource, type HandoffInfo, type HighlightView, type HostEvent, type ReaderPrefs, type TranslationProgress, type UnitTranslation, type ZbrHost } from "../../core/host-api";
+import { DEFAULT_PREFS, PAPER_PREF_KEYS, type DocSource, type HandoffInfo, type HighlightView, type HostEvent, type ReaderPrefs, type TranslationProgress, type UnitTranslation, type ZbrHost } from "../../core/host-api";
 import { Locator, type PagePosition } from "../../core/locate";
 import { matchMineru, type Enrichment } from "../../core/mineru";
 import { buildMineruDocument, type MineruContentItem } from "../../core/mineru-doc";
@@ -55,6 +55,12 @@ function readPrefs(): ReaderPrefs {
   }
 }
 
+function pick<T extends object, K extends keyof T>(o: T, keys: readonly K[]): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of keys) if (o[k] !== undefined) out[k] = o[k];
+  return out;
+}
+
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const subtle = subtleCrypto();
   const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
@@ -91,9 +97,12 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
   };
 
   const progress: TranslationProgress = { running: false, done: 0, total: 0, failed: 0 };
+  // The paper's cache file, once open: its own settings (the text source among them).
+  let paperStore: TranslationStore | undefined;
   const ready = (async () => {
     const onProgress = (pct: number) => emit({ type: "progress", progress: { ...progress, message: `Zotero 正在解析 PDF ${Math.round(pct)}%` } });
     const [{ doc, locator }, store] = await Promise.all([loadDocument(attachment, onProgress), TranslationStore.open(attachment.libraryID, attachment.key)]);
+    paperStore = store;
     return { doc, locator, store, blocks: new Map(doc.blocks.map((b) => [b.id, b])) };
   })();
   let pdfBytes: Promise<Uint8Array> | null = null;
@@ -146,7 +155,7 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
         }
     for (const hashes of groups.values()) store.link(hashes);
   };
-  const usingMineru = () => (opts.source ?? readPrefs().source) === "mineru";
+  const usingMineru = () => (opts.source ?? paperStore?.prefs?.source ?? readPrefs().source) === "mineru";
   async function activeDoc(): Promise<ZbrDocument> {
     const { doc } = await ready;
     if (!usingMineru()) return doc;
@@ -909,10 +918,20 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
     },
 
     async getPrefs() {
-      return readPrefs();
+      const global = readPrefs();
+      const { store } = await ready;
+      // First opening: the paper takes the current defaults and keeps them from now on.
+      if (!store.prefs) store.prefs = pick(global, PAPER_PREF_KEYS);
+      return { ...global, ...store.prefs };
     },
     async setPrefs(p) {
+      // A change in a paper stays with the paper, and is also the default for papers opened later.
       setPref("readerPrefs", JSON.stringify({ ...readPrefs(), ...p, v: 3 }));
+      const own = pick(p, PAPER_PREF_KEYS);
+      if (Object.keys(own).length) {
+        const { store } = await ready;
+        store.prefs = { ...store.prefs, ...own };
+      }
     },
 
     dispose() {

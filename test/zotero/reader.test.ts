@@ -394,13 +394,20 @@ describe("Bilingual Reader in Zotero", function () {
     }
   });
 
-  it("remembers the reading position when the paper is reopened", async function () {
+  it("remembers the reading position and the paper's own settings when it is reopened", async function () {
+    // A setting changed in this paper stays with it, whatever the default is later.
+    (rdoc.querySelector('[data-mode="zh"]') as HTMLElement).click();
+    await waitFor(() => rdoc.getElementById("doc")!.className === "mode-zh", 5000, 20);
     const target = [...rdoc.querySelectorAll<HTMLElement>("section.k-heading")][6];
     target.scrollIntoView({ block: "start" });
     rwin.dispatchEvent(new rwin.Event("scroll"));
     await sleep(900);
     const win = Zotero.getMainWindow() as any;
     win.Zotero_Tabs.close(win.Zotero_Tabs._tabs.find((t: any) => t.type === "zbr").id);
+    const cacheFile = PathUtils.join(Z.ZBR.api.cacheDir(), `${attachment.libraryID}-${attachment.key}.json`);
+    await waitFor(async () => ((await IOUtils.readJSON(cacheFile)) as any).prefs?.mode === "zh", 5000, 100);
+    const globalPrefs = JSON.parse(String(Z.Prefs.get("extensions.zotero.zbr.readerPrefs", true)));
+    Z.Prefs.set("extensions.zotero.zbr.readerPrefs", JSON.stringify({ ...globalPrefs, mode: "en" }), true);
     // With the PDF open in Zotero's reader and another tab after it, the bilingual tab opens next to the PDF.
     await Z.Reader.open(attachment.id);
     const pdfTab = await waitFor(() => win.Zotero_Tabs.getTabIDByItemID(attachment.id), 30_000);
@@ -423,6 +430,9 @@ describe("Bilingual Reader in Zotero", function () {
     const top = rdoc.querySelector<HTMLElement>(`section.blk[data-b="${target.dataset.b}"]`)!.getBoundingClientRect().top;
     assert.isBelow(Math.abs(top), 150, `restored heading at ${top}px`);
     assert.isTrue(placed, "bilingual tab sits right after the PDF tab");
+    assert.equal(rdoc.getElementById("doc")!.className, "mode-zh", "the paper keeps its own mode");
+    (rdoc.querySelector('[data-mode="interleave"]') as HTMLElement).click();
+    await waitFor(() => rdoc.getElementById("doc")!.className === "mode-interleave", 5000, 20);
   });
 
   it("shows the Chinese bubble when hovering English", async function () {
