@@ -306,7 +306,8 @@ function syncToolbar() {
   $("#opt-rich").hidden = !state.enrich || isMineruDoc();
   ($("#opt-source") as HTMLSelectElement).value = state.doc.parser.kind === "mineru" ? "mineru" : "zotero";
   $("#opt-source").hidden = !state.hasMineru;
-  $("#btn-mineru").hidden = state.hasMineru || !state.host.parseMineru;
+  $("#btn-mineru").hidden = !state.host.parseMineru;
+  $("#btn-mineru").textContent = state.hasMineru ? "重新解析 MinerU…" : "MinerU 解析…";
   $("#opt-peek").classList.toggle("dim", state.prefs.mode === "interleave" || state.prefs.mode === "side");
   ($("#opt-auto") as HTMLInputElement).checked = state.prefs.autoTranslate;
   ($("#opt-hlzh") as HTMLInputElement).checked = state.prefs.highlightWithZh;
@@ -346,7 +347,7 @@ function buildToolbar() {
     <select id="opt-rich" title="公式与表格：原 PDF 截图，或用 MinerU 解析结果重建（LaTeX 公式可复制，表格可选中）">
       <option value="mineru">公式表格：MinerU</option><option value="pdf">公式表格：原图</option>
     </select>
-    <button id="btn-mineru" class="link" hidden title="可选：用 MinerU 解析这篇 PDF，公式按 LaTeX 排版、表格可选中（需要免费的 MinerU API Token）">MinerU 解析…</button>
+    <button id="btn-mineru" class="link" hidden title="使用已配置的 MinerU 官方在线 API 或本地 Docker API；已有共享产物会复用，可显式重新解析并覆盖">MinerU 解析…</button>
     <select id="opt-theme" title="页面配色">
       <option value="auto">主题：跟随 Zotero</option><option value="light">主题：浅色</option><option value="sepia">主题：护眼</option><option value="dark">主题：深色</option>
     </select>
@@ -376,7 +377,7 @@ function buildToolbar() {
   $("#opt-source").addEventListener("change", (e) =>
     switchSource((e.target as HTMLSelectElement).value as DocSource).catch((err) => toast(`切换来源失败：${err?.message ?? err}`)),
   );
-  $("#btn-mineru").addEventListener("click", () => void openMineruDialog(state.host, toast, loadEnrichment));
+  $("#btn-mineru").addEventListener("click", () => void openMineruDialog(state.host, toast, loadEnrichment, state.hasMineru));
   $("#opt-theme").addEventListener("change", (e) => setPrefs({ theme: (e.target as HTMLSelectElement).value as Theme }, false));
   $("#opt-pair").addEventListener("change", (e) => setPrefs({ pairStyle: (e.target as HTMLSelectElement).value as PairStyle }, false));
   $("#opt-pair-color").addEventListener("input", (e) => setPrefs({ pairColor: (e.target as HTMLInputElement).value }, false));

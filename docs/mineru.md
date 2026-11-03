@@ -1,74 +1,45 @@
-# 给双语阅读准备 MinerU 解析结果
+# Bilingual Reader 的 MinerU 共享产物
 
-本文说明插件识别 MinerU 解析结果的目录格式，以及两种生成方法。写给用户，也写给替用户操作的 AI Agent：按“目录格式”放好文件即可，插件不关心结果是怎么来的。
+Bilingual Reader 与 Zotero Research Database 共用同一套 MinerU 产物。默认目录为 `E:\software\Zotero\mineru-shared-store`，可在两个插件的设置中改成同一个路径。
 
-只想要公式排版、不想折腾的普通用户，用插件自带的云端解析即可：双语页工具栏“MinerU 解析…”，粘贴 mineru.net 的 API Token（“API 管理”页面免费创建）。下文针对已有本地 MinerU、想批量处理或想让 Agent 代劳的情况。
+## 目录
 
-## 目录格式
-
-```
-<MinerU 根目录>/attachments/<附件key>/
-├── parse.json
-└── raw/
-    └── content_list.json
-```
-
-- **MinerU 根目录**：默认是 `<Zotero 数据目录>/mineru-paper-store`；在“设置 → 双语阅读 → MinerU 解析库目录”里可以改。Zotero 数据目录在“设置 → 高级 → 文件和文件夹”里能看到，Windows 上通常是 `C:\Users\<用户名>\Zotero`。
-- **附件key**：PDF 附件条目的 8 位 key，不是父条目的 key。PDF 本身存放在 `<Zotero 数据目录>/storage/<附件key>/` 下，目录名就是它。也可以在 Zotero 里选中 PDF 附件后运行“工具 → 开发者 → Run JavaScript”：`ZoteroPane.getSelectedItems()[0].key`。
-- **raw/content_list.json**：MinerU 输出的 `<文件名>_content_list.json`，改名放到这里。不要用 `content_list_v2.json`，它的结构不同。`full.md`、`images/` 等其他输出不需要；放进来也没关系。
-- **parse.json**：至少两个字段：
-
-```json
-{
-  "status": "complete",
-  "pdfSha256": "<该 PDF 文件内容的 SHA-256，64 位小写十六进制>"
-}
+```text
+<共享目录>/
+├── papers/<PDF SHA-256>/
+│   ├── parse.json
+│   ├── full.md
+│   └── raw/
+├── index/<libraryID>-<attachmentKey>.json
+└── locks/<PDF SHA-256>.lock
 ```
 
-`pdfSha256` 必须和 Zotero 里这份 PDF 的字节完全一致；PDF 被替换或重新下载后，旧结果自动不再使用，需要重新解析。其余字段（`provider`、`backend`、`completedAt` 等）只作记录，插件不读。
+插件先用 PDF 内容计算 SHA-256，再检查 `parse.json`、`full.md` 和 ZIP/原始文件是否完整。解析结果只会用于完全匹配当前 PDF 的缓存。
 
-计算 SHA-256：
+## 解析方式
 
-```bash
-sha256sum "<PDF 路径>"                                      # Linux / Git Bash
-```
+设置 → 双语阅读 → MinerU 中只保留两种方式：
 
-```powershell
-(Get-FileHash "<PDF 路径>" -Algorithm SHA256).Hash.ToLower()   # PowerShell
-```
+1. **官方在线 API**：填写 `https://mineru.net/api/v4` 和 Token。PDF 会上传到 MinerU 服务器。
+2. **本地 Docker API**：填写本地 MinerU API 地址，默认 `http://127.0.0.1:8000`。支持 MinerU 4.x 的 `/v1` 接口，并兼容旧版 `/file_parse` 和 `/tasks` 协议。
 
-放好后重新打开这篇论文的双语页即可生效（工具栏出现“来源”选项，公式表格换成 MinerU 版本）。
+MinerU Desktop/客户端模式已经移除。Bilingual Reader 只调用 API，不启动 MinerU 客户端。
 
-## 方法一：本地 MinerU
+## 复用与覆盖
 
-安装和模型下载见 [MinerU 官方仓库](https://github.com/opendatalab/MinerU)。解析一篇：
+普通解析会按以下顺序复用：共享缓存、旧版按附件目录的有效产物。共享缓存通过 PDF SHA-256 文件锁协调两个插件；一个插件正在解析时，另一个插件等待并读取新缓存，因此不会重复上传或解析同一 PDF。
 
-```bash
-mineru -p "<PDF 路径>" -o "<输出目录>"
-```
+阅读页中点击“MinerU 解析…”或“重新解析 MinerU…”可以勾选“重新解析并覆盖共享产物”。强制模式绕过缓存，但仍使用同一把 PDF 锁。新 ZIP 先写入临时目录并做完整性校验，然后替换当前缓存；提交失败时恢复旧目录。旧的 Zotero Markdown 附件不会删除，新的共享版本成为当前版本。
 
-输出里找到 `<文件名>_content_list.json`，按上面的格式复制成 `raw/content_list.json` 并写 `parse.json`。建议开启公式和表格识别（默认开启）；vlm 后端的公式质量明显更好。
+## 兼容旧产物
 
-## 方法二：MinerU 云端 API（脚本批量）
+旧目录 `<Zotero 数据目录>/mineru-paper-store/attachments/<附件key>/` 仍会读取 `parse.json` 和 `content_list.json`。读取到旧产物后不会再次解析；下一次显式转换可以把结果写入共享目录。
 
-插件的“MinerU 解析…”按钮做的就是这几步，Agent 也可以照做（`$TOKEN` 为 mineru.net 的 API Token）：
+共享缓存中的 `raw` 可以包含 MinerU ZIP 解包出的 `*_content_list.json`、图片和原始 ZIP。阅读器只读取结构化内容清单，公式和表格仍使用现有 MinerU 阅读渲染逻辑。
 
-1. 申请上传地址：
+## 直接使用
 
-   ```bash
-   curl -s -X POST https://mineru.net/api/v4/file-urls/batch \
-     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-     -d '{"files":[{"name":"paper.pdf"}],"model_version":"vlm","enable_formula":true,"enable_table":true,"language":"en"}'
-   ```
+设置好 API 后，打开 PDF 的双语阅读页，点工具栏的 MinerU 按钮。已有缓存会直接完成；需要刷新时勾选覆盖选项。解析完成后切换“来源：MinerU”即可使用结构化正文。
 
-   返回 `data.batch_id` 和 `data.file_urls[0]`。
 
-2. 上传 PDF（不要带 Content-Type 头）：`curl -X PUT -T paper.pdf "<file_urls[0]>"`。上传完成后自动开始解析。
-3. 轮询结果：`GET https://mineru.net/api/v4/extract-results/batch/<batch_id>`（同样带 Authorization）。`data.extract_result[0].state` 依次为 `waiting-file`、`pending`、`running`、`converting`，最后为 `done` 或 `failed`；`done` 时 `full_zip_url` 给出结果压缩包。
-4. 下载压缩包，取出其中的 `*_content_list.json`，按目录格式放好并写 `parse.json`。
-
-限制：每个账号每天 1000 页高优先级额度，超出后仍会处理但排队更久；单个文件不超过 200 页、200 MB；Token 会过期，过期后在 mineru.net 重新创建。
-
-## 隐私
-
-云端解析会把 PDF 上传到 MinerU（上海人工智能实验室 OpenDataLab）的服务器。不希望上传的论文，请用本地 MinerU，或者不解析，直接用 Zotero 文本加 PDF 截图阅读。
+````

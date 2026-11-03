@@ -106,14 +106,13 @@
 
 有 MinerU 解析时多两样：公式按 LaTeX 排版（点击复制 LaTeX）、表格变成可选中的表格；工具栏多出“来源：MinerU”，正文里的行内公式也排版。获得解析结果有两种方式：
 
-1. **插件里一键云端解析（推荐普通用户）**
-   1. 打开 [mineru.net](https://mineru.net)，注册登录，在“API 管理”里创建一个 API Token。免费额度为每天 1000 页（高优先级），单个文件不超过 200 页、200 MB。
-   2. 在双语页工具栏点“MinerU 解析…”，粘贴 Token，点“保存并解析”。Token 也可以在“设置 → 双语阅读”里填写或修改。
-   3. PDF 会上传到 MinerU 的服务器，排队和解析通常要几分钟，进度显示在工具栏。完成后公式表格自动换成 MinerU 版本，结果存在本机，以后打开直接使用。
+1. **插件内调用官方在线 API**：在“设置 → 双语阅读 → MinerU”选择官方 API，填写 `https://mineru.net/api/v4` 和 API Token。双语页点“MinerU 解析…”即可上传、轮询并保存结果。
+2. **插件内调用本地 Docker API**：选择“本地 Docker API”，填写本地服务地址（默认 `http://127.0.0.1:8000`）。插件支持 MinerU 4.x v1 接口，并兼容旧版 `/file_parse`、`/tasks` 协议。
+3. **共享产物复用与覆盖**：两个插件共用 `E:\software\Zotero\mineru-shared-store`，按 PDF SHA-256 缓存。普通解析优先复用完整缓存并通过文件锁避免并发重复解析；已有结果时勾选“重新解析并覆盖共享产物”，新 ZIP 会先校验，再原子替换旧缓存，失败自动恢复旧版本。
 
    ![MinerU 解析](docs/images/17-mineru-dialog.png)
 
-2. **自己用 MinerU 解析**（本地部署或其他脚本）：按 [docs/mineru.md](docs/mineru.md) 的目录格式放好结果，插件会自动识别。这份文档也写给 AI Agent 看，可以直接让 Agent 照着做。
+旧版按附件目录的 `parse.json`/`content_list.json` 仍可读取；新生成结果统一写入共享目录。完整目录约定见 [docs/mineru.md](docs/mineru.md)。
 
 ## 翻译引擎
 
@@ -145,7 +144,7 @@
 
 - 译文缓存：`<Zotero 数据目录>/zotero-bilingual-reader/translations/<库ID>-<附件key>.json`，设置面板可以直接打开这个目录。阅读位置和本篇术语表也存在这里。译文按句子内容的哈希存放，Zotero 和 MinerU 两个来源里的同一句话共用译文。
 - 整篇翻译任务：`<Zotero 数据目录>/zotero-bilingual-reader/jobs/`。
-- MinerU 解析：`<Zotero 数据目录>/mineru-paper-store/attachments/<附件key>/`（目录可在设置里改）。`parse.json` 里的 `pdfSha256` 与当前 PDF 一致才使用；插件只在你点“MinerU 解析…”时往这里写入。格式见 [docs/mineru.md](docs/mineru.md)。
+- MinerU 共享产物：`E:\software\Zotero\mineru-shared-store/papers/<PDF SHA-256>/`，索引在 `index/<库ID>-<附件key>.json`，锁在 `locks/<PDF SHA-256>.lock`。设置中的共享目录必须与 Research Database 相同。旧的 `<Zotero 数据目录>/mineru-paper-store/attachments/<附件key>/` 仅作兼容读取。
 - 写进 Zotero 文库的只有你主动创建的高亮和批注，和在 Zotero 阅读器里做的高亮完全一样。
 
 ## 开发

@@ -24,6 +24,7 @@
     "build:cli": "esbuild tools/zbr.ts --bundle --platform=node --format=esm --outfile=tools/zbr.mjs"
   },
   "dependencies": {
+    "jszip": "^3.10.2",
     "katex": "^0.16.22"
   },
   "devDependencies": {

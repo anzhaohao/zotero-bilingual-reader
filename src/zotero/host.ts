@@ -15,7 +15,8 @@ import { cleanupAgentSessions, engineConcurrency, engineConfigKey, getEngine, li
 import { getPref, setPref } from "./prefs";
 import { looseKey } from "../../core/hash";
 import { alignDocuments, type Alignment } from "../../core/align";
-import { parseOnMineruCloud } from "./mineru-cloud";
+import { parseMineruZip, parseOnMineruApi, type MinerUMode } from "./mineru-cloud";
+import { claimSharedMinerUWork, findSharedMinerUCacheForAttachment, writeSharedMinerUResult, type SharedMinerUIdentity } from "./mineruSharedStore";
 import { TranslationStore } from "./store";
 import { clearTimeout, newAbortController, setTimeout, subtleCrypto } from "./globals";
 
@@ -67,6 +68,40 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const DEFAULT_MINERU_SHARED_ROOT = "E:\\software\\Zotero\\mineru-shared-store";
+
+async function findContentList(directory: string): Promise<MineruContentItem[] | null> {
+  const archivePath = PathUtils.join(directory, "raw", "result.zip");
+  try {
+    if (await IOUtils.exists(archivePath)) {
+      const parsed = await parseMineruZip(await IOUtils.read(archivePath));
+      if (parsed.contentList?.length) return parsed.contentList as MineruContentItem[];
+    }
+  } catch {
+    // Continue with extracted content_list.json files and legacy layouts.
+  }
+  const visit = async (dir: string, depth = 0): Promise<MineruContentItem[] | null> => {
+    if (depth > 8) return null;
+    for (const path of await IOUtils.getChildren(dir)) {
+      const stat = await IOUtils.stat(path);
+      if (stat.type === "directory") {
+        const nested = await visit(path, depth + 1);
+        if (nested) return nested;
+      } else if (/(^|[\\/])content_list(?:_v?\d+)?\.json$|_content_list\.json$/i.test(path)) {
+        try {
+          const raw = await IOUtils.readJSON(path);
+          const rows = Array.isArray(raw) ? raw : raw?.data;
+          if (Array.isArray(rows)) return rows as MineruContentItem[];
+        } catch {
+          // Ignore malformed auxiliary manifests and continue searching.
+        }
+      }
+    }
+    return null;
+  };
+  try { return await visit(directory); } catch { return null; }
+}
+
 
 interface Job {
   batch: Batch;
@@ -108,22 +143,28 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
   let pdfBytes: Promise<Uint8Array> | null = null;
   const getPdfData = () => (pdfBytes ??= (async () => IOUtils.read(await attachment.getFilePathAsync()))());
 
-  // MinerU parse of this exact PDF, if there is one (the user's own MinerU, or a cloud parse the
-  // reader asked for, both in the same store layout).
+  // MinerU parse of this exact PDF. The shared store is checked first so Research Database and
+  // Bilingual Reader never parse the same PDF twice. The old per-attachment layout remains a
+  // read-only compatibility fallback.
   let mineruItems: Promise<MineruContentItem[] | null> | null = null;
   const mineruDir = () =>
     PathUtils.join(String(getPref("mineruRoot") || "").trim() || PathUtils.join(Zotero.DataDirectory.dir, "mineru-paper-store"), "attachments", attachment.key);
+  const sharedMineruRoot = () => String(getPref("mineruSharedStoreDirectory") || "").trim() || DEFAULT_MINERU_SHARED_ROOT;
   const loadMineru = () =>
     (mineruItems ??= (async () => {
+      const pdfHash = await sha256Hex(await getPdfData());
+      const shared = await findSharedMinerUCacheForAttachment(sharedMineruRoot(), attachment.libraryID, attachment.key);
+      if (shared) {
+        const items = await findContentList(shared);
+        if (items?.length) return items;
+      }
       const dir = mineruDir();
       const parsePath = PathUtils.join(dir, "parse.json");
-      const listPath = PathUtils.join(dir, "raw", "content_list.json");
-      if (!(await IOUtils.exists(parsePath)) || !(await IOUtils.exists(listPath))) return null;
+      if (!(await IOUtils.exists(parsePath))) return null;
       const parse: any = await IOUtils.readJSON(parsePath);
       if (parse?.status && parse.status !== "complete") return null;
-      // Only a parse that provably belongs to this exact file may be shown or pasted in.
-      if (!parse?.pdfSha256 || parse.pdfSha256 !== (await sha256Hex(await getPdfData()))) return null;
-      return (await IOUtils.readJSON(listPath)) as MineruContentItem[];
+      if (!parse?.pdfSha256 || String(parse.pdfSha256).toLowerCase() !== pdfHash) return null;
+      return findContentList(dir);
     })().catch((e) => {
       Zotero.logError(e);
       return null;
@@ -786,10 +827,14 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
     },
 
     async mineruReady() {
-      return !!String(getPref("mineruToken") || "").trim();
+      const mode = String(getPref("mineruMode") || "official-api");
+      return mode === "self-hosted"
+        ? !!String(getPref("mineruSelfHostedEndpoint") || "http://127.0.0.1:8000").trim()
+        : !!String(getPref("mineruOfficialToken") || getPref("mineruToken") || "").trim();
     },
 
     async setMineruToken(token: string) {
+      setPref("mineruOfficialToken", token.trim());
       setPref("mineruToken", token.trim());
     },
 
@@ -797,36 +842,47 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
       if (/^https:\/\//.test(url)) Zotero.launchURL(url);
     },
 
-    async parseMineru() {
-      const token = String(getPref("mineruToken") || "").trim();
-      if (!token) throw new Error("还没有填写 MinerU API Token（设置 → 双语阅读 → MinerU）");
+    async parseMineru(forceRefresh = false) {
+      const mode = String(getPref("mineruMode") || "official-api") as MinerUMode;
+      const endpoint = mode === "self-hosted"
+        ? String(getPref("mineruSelfHostedEndpoint") || "http://127.0.0.1:8000").trim()
+        : String(getPref("mineruOfficialEndpoint") || "https://mineru.net/api/v4").trim();
+      const token = String(getPref("mineruOfficialToken") || getPref("mineruToken") || "").trim();
+      if (mode === "official-api" && !token) throw new Error("还没有填写 MinerU 官方 API Token（设置 → 双语阅读 → MinerU）");
       const pdf = await getPdfData();
-      const labels: Record<string, string> = { uploading: "上传 PDF", "waiting-file": "等待文件", pending: "排队中", running: "解析中", converting: "整理结果", downloading: "下载结果" };
-      emitProgress("MinerU：提交中…");
-      try {
-        const items = await parseOnMineruCloud({
-          token,
-          pdf,
-          name: String(attachment.attachmentFilename || `${attachment.key}.pdf`),
-          onProgress: (p) => emitProgress(`MinerU：${labels[p.state] ?? p.state}${p.total ? ` ${p.pages ?? 0}/${p.total} 页` : ""}…`),
-        });
-        const dir = mineruDir();
-        await IOUtils.makeDirectory(PathUtils.join(dir, "raw"), { createAncestors: true, ignoreExisting: true });
-        await IOUtils.writeJSON(PathUtils.join(dir, "raw", "content_list.json"), items);
-        await IOUtils.writeJSON(PathUtils.join(dir, "parse.json"), {
-          provider: "mineru-cloud",
-          backend: "vlm",
-          status: "complete",
-          pdfSha256: await sha256Hex(pdf),
-          completedAt: new Date().toISOString(),
-        });
+      const pdfSha256 = await sha256Hex(pdf);
+      const identity: SharedMinerUIdentity = { libraryID: attachment.libraryID, attachmentKey: attachment.key, pdfSha256, pdfFileName: String(attachment.attachmentFilename || attachment.key + ".pdf") };
+      const root = sharedMineruRoot();
+      const claim = await claimSharedMinerUWork({ root, identity, timeoutMs: 60 * 60 * 1000, forceRefresh, onWaiting: () => emitProgress("MinerU：等待同一 PDF 的其他解析任务…") });
+      if (claim.cacheHit) {
         mineruItems = null;
         mineruDoc = null;
         alignment = null;
-        emitProgress("MinerU 解析完成");
+        emitProgress("MinerU：已复用共享产物");
+        return;
+      }
+      const labels: Record<string, string> = { connecting: "连接本地服务", uploading: "上传 PDF", "waiting-file": "等待文件", pending: "排队中", running: "解析中", converting: "整理结果", downloading: "下载结果" };
+      emitProgress(forceRefresh ? "MinerU：重新解析并生成新产物…" : "MinerU：提交中…");
+      try {
+        const result = await parseOnMineruApi({
+          mode, endpoint, token, pdf, name: identity.pdfFileName,
+          tier: String(getPref("mineruTier") || "standard"),
+          method: String(getPref("mineruMethod") || "auto") as "auto" | "txt" | "ocr",
+          autoStart: Boolean(getPref("mineruSelfHostedAutoStart")),
+          projectDirectory: String(getPref("mineruSelfHostedProjectDirectory") || "E:\\software\\DockerProject\\MinerU"),
+          dockerExecutable: String(getPref("mineruDockerExecutable") || "docker"),
+          onProgress: (p) => emitProgress("MinerU：" + (labels[p.state] ?? p.state) + (p.total ? ` ${p.pages ?? 0}/${p.total} 页` : "") + "…"),
+        });
+        await writeSharedMinerUResult({ root, identity, result, sourceMode: mode, overwrite: forceRefresh });
+        mineruItems = null;
+        mineruDoc = null;
+        alignment = null;
+        emitProgress(forceRefresh ? "MinerU：新产物已验证并覆盖共享缓存" : "MinerU：解析完成并已写入共享缓存");
       } catch (e: any) {
         emitProgress(`MinerU 解析失败：${e?.message ?? e}`);
         throw e;
+      } finally {
+        await claim.release();
       }
     },
 

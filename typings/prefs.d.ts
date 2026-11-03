@@ -27,6 +27,16 @@ declare namespace _ZoteroTypes {
       "agentTimeoutSec": number;
       "glossary": string;
       "batchChars": number;
+      "mineruSharedStoreDirectory": string;
+      "mineruMode": string;
+      "mineruOfficialEndpoint": string;
+      "mineruOfficialToken": string;
+      "mineruSelfHostedEndpoint": string;
+      "mineruSelfHostedAutoStart": boolean;
+      "mineruSelfHostedProjectDirectory": string;
+      "mineruDockerExecutable": string;
+      "mineruTier": string;
+      "mineruMethod": string;
       "mineruRoot": string;
       "mineruToken": string;
     };

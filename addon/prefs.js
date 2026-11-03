@@ -26,7 +26,27 @@ pref("__prefsPrefix__.agentTimeoutSec", 300);
 // Translation
 pref("__prefsPrefix__.glossary", "");
 pref("__prefsPrefix__.batchChars", 2600);
-// MinerU parse store (empty = <Zotero data dir>/mineru-paper-store)
+// MinerU shared parse store (must match Zotero Research Database).
+pref(
+  "__prefsPrefix__.mineruSharedStoreDirectory",
+  "E:\\software\\Zotero\\mineru-shared-store",
+);
+pref("__prefsPrefix__.mineruMode", "official-api");
+pref("__prefsPrefix__.mineruOfficialEndpoint", "https://mineru.net/api/v4");
+pref("__prefsPrefix__.mineruOfficialToken", "");
+pref("__prefsPrefix__.mineruSelfHostedEndpoint", "http://127.0.0.1:8000");
+pref("__prefsPrefix__.mineruSelfHostedAutoStart", false);
+pref(
+  "__prefsPrefix__.mineruSelfHostedProjectDirectory",
+  "E:\\software\\DockerProject\\MinerU",
+);
+pref(
+  "__prefsPrefix__.mineruDockerExecutable",
+  "E:\\software\\docker\\resources\\bin\\docker.exe",
+);
+pref("__prefsPrefix__.mineruTier", "standard");
+pref("__prefsPrefix__.mineruMethod", "auto");
+// Legacy per-attachment parse store, read-only compatibility fallback.
 pref("__prefsPrefix__.mineruRoot", "");
 // MinerU cloud API token (mineru.net → API 管理); used only when the reader asks for a parse
 pref("__prefsPrefix__.mineruToken", "");

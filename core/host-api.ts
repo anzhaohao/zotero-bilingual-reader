@@ -204,8 +204,8 @@ export interface ZbrHost {
    * Parse this PDF with MinerU (cloud API, user's token) so the "MinerU" source and typeset
    * formulas become available. Progress arrives as progress messages. Absent where unsupported.
    */
-  parseMineru?(): Promise<void>;
-  /** Whether a MinerU API token is set (so parseMineru can run without asking for one first). */
+  parseMineru?(forceRefresh?: boolean): Promise<void>;
+  /** Whether the selected MinerU API is configured (so parseMineru can run without asking for one first). */
   mineruReady?(): Promise<boolean>;
   /** Save the MinerU API token (same as the field in the plugin settings). */
   setMineruToken?(token: string): Promise<void>;
