@@ -1,6 +1,12 @@
 // MinerU API adapters. Only the official online API and a self-hosted Docker API are supported.
 
-import { hostFetch as fetch, newTextDecoder, setTimeout } from "./globals";
+import {
+  clearTimeout,
+  hostFetch as fetch,
+  newAbortController,
+  newTextDecoder,
+  setTimeout,
+} from "./globals";
 
 export type MinerUMode = "official-api" | "self-hosted";
 
@@ -22,21 +28,27 @@ export interface MinerUConversionResult {
   contentList?: unknown[];
 }
 
-export interface MinerUApiOptions {
+export interface MinerUConnectionOptions {
   mode: MinerUMode;
   endpoint: string;
   token?: string;
-  pdf: Uint8Array;
-  name: string;
-  tier?: string;
-  method?: "auto" | "txt" | "ocr";
-  enableFormula?: boolean;
-  enableTable?: boolean;
-  onProgress?: (p: { state: string; pages?: number; total?: number }) => void;
   signal?: AbortSignal;
   autoStart?: boolean;
   projectDirectory?: string;
   dockerExecutable?: string;
+}
+
+export interface MinerUApiOptions extends MinerUConnectionOptions {
+  pdf: Uint8Array;
+  name: string;
+  tier?: string;
+  method?: "auto" | "txt" | "ocr";
+  modelVersion?: "pipeline" | "vlm";
+  language?: string;
+  backend?: string;
+  enableFormula?: boolean;
+  enableTable?: boolean;
+  onProgress?: (p: { state: string; pages?: number; total?: number }) => void;
 }
 
 const OFFICIAL_API = "https://mineru.net/api/v4";
@@ -128,11 +140,11 @@ async function parseOfficial(
     {
       method: "POST",
       body: JSON.stringify({
-        files: [{ name }],
-        model_version: "vlm",
+        files: [{ name, is_ocr: opts.method === "ocr" }],
+        model_version: opts.modelVersion || "vlm",
         enable_formula: opts.enableFormula ?? true,
         enable_table: opts.enableTable ?? true,
-        language: "en",
+        language: opts.language || "ch",
       }),
     },
   );
@@ -177,6 +189,43 @@ async function parseOfficial(
     return parseMineruZip(new Uint8Array(await response.arrayBuffer()), name);
   }
   throw new Error("MinerU 解析超时（20 分钟），稍后可再试");
+}
+
+export async function probeMineruApi(
+  opts: MinerUConnectionOptions,
+): Promise<string> {
+  const endpoint = cleanEndpoint(opts.endpoint);
+  if (opts.mode === "self-hosted") {
+    if (!endpoint) throw new Error("请在统一设置中填写 MinerU 本地 API 地址");
+    await ensureSelfHostedReady(endpoint, opts);
+    return "本地 Docker API 健康检查通过：" + endpoint;
+  }
+  if (!endpoint) throw new Error("请在统一设置中填写 MinerU 官方 API 地址");
+  if (!/^https:\/\//i.test(endpoint))
+    throw new Error("MinerU 官方在线 API 必须使用 HTTPS");
+  const token = String(opts.token || "").trim();
+  if (!token)
+    throw new Error("MinerU API Token 未配置；请在统一设置中填写 Token 或配置环境变量");
+
+  const controller = newAbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(endpoint + "/extract/task/invalid-zbr-connection-test", {
+      headers: { Authorization: "Bearer " + token },
+      signal: controller.signal,
+    });
+    if ([401, 403].includes(response.status))
+      throw new Error("MinerU 官方 API Token 无效或没有访问权限");
+    if (response.status >= 500)
+      throw new Error("MinerU 官方 API 服务异常：HTTP " + response.status);
+    return "官方在线 API 连接与认证通过（HTTP " + response.status + "）";
+  } catch (error: any) {
+    if (error?.name === "AbortError")
+      throw new Error("MinerU 官方 API 连接超时（15 秒）");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function parseSelfHosted(
@@ -305,7 +354,7 @@ async function parseSelfHosted(
 
 async function ensureSelfHostedReady(
   endpoint: string,
-  opts: MinerUApiOptions,
+  opts: MinerUConnectionOptions,
 ): Promise<void> {
   const healthy = async () => {
     for (const path of ["/v1/health", "/health"]) {

@@ -1,5 +1,4 @@
-// "MinerU 解析…": for readers without a MinerU setup of their own. Explains what MinerU adds,
-// how to get a free API token, and runs the cloud parse through the host.
+// MinerU parsing uses the single configuration owned by Research Database.
 
 import type { ZbrHost } from "../core/host-api";
 import { modal } from "./handoff";
@@ -23,14 +22,14 @@ export async function openMineruDialog(
   onDone: () => void,
   hasExisting = false,
 ) {
-  const configured = (await host.mineruReady?.()) ?? false;
+  let configured = (await host.mineruReady?.()) ?? false;
   const back = modal("用 MinerU 解析这篇论文");
   const body = back.querySelector(".ho-body")!;
   body.append(
     el(
       "p",
       "ho-intro",
-      "使用设置中选择的 MinerU 官方在线 API 或本地 Docker API。已有共享产物会直接复用；重新解析会生成新产物，验证成功后覆盖共享缓存，旧版本保留为历史。",
+      "解析方式和 API 统一在 Research Database → MinerU 中配置。本窗口和 Research Database 使用同一份设置与共享产物，不需要在这里重复填写 Token。",
     ),
   );
   const steps = el("ol", "mn-steps");
@@ -41,62 +40,62 @@ export async function openMineruDialog(
     e.preventDefault();
     host.openUrl?.(SITE);
   });
-  s1.append(
-    "官方 API 用户打开 ",
-    link,
-    " 注册登录并创建 Token；本地 Docker 用户直接在设置中填写本地 API 地址。",
-  );
+  s1.append("官方 API 用户可在 ", link, " 创建 Token；本地 Docker 用户只需配置本地 API 地址。");
   steps.append(
     s1,
-    el(
-      "li",
-      "",
-      "在设置 → 双语阅读 → MinerU 中选择解析方式，填写共享目录和对应 API 配置。",
-    ),
-    el(
-      "li",
-      "",
-      "普通解析会复用已有产物；需要更新时勾选下面的“重新解析并覆盖”。",
-    ),
+    el("li", "", "普通解析优先复用已有产物，不会重复解析相同 PDF。"),
+    el("li", "", "需要更新时勾选“重新解析并覆盖”，新产物验证成功后才会替换旧缓存。"),
   );
   body.append(steps);
-  body.append(
-    el(
-      "p",
-      "ho-intro",
-      "官方 API 会上传 PDF 到 MinerU 服务器；本地 Docker API 只访问你配置的本机服务。",
-    ),
+  const readiness = el(
+    "p",
+    "ho-intro",
+    configured
+      ? "已读取 Research Database 的统一 MinerU 配置。"
+      : "统一配置尚不完整，请先打开设置并测试连接。",
   );
-  const input = el("input", "mn-token");
-  input.type = "password";
-  input.placeholder = configured
-    ? "已配置（留空沿用）"
-    : "官方 API Token（本地 Docker 可留空）";
-  input.autocomplete = "off";
-  const go = el("button", "", "保存并解析");
+  body.append(readiness);
+
+  const go = el("button", "", hasExisting ? "重新解析" : "开始解析");
+  const settings = el("button", "", "打开统一 MinerU 设置");
   const status = el("p", "ho-status");
   status.hidden = true;
   const actions = el("div", "ho-actions");
-  actions.append(go);
-  body.append(input, actions, status);
+  actions.append(settings, go);
   const force = el("input", "mn-force") as HTMLInputElement;
   force.type = "checkbox";
   force.checked = hasExisting;
   const forceLabel = el("label", "", "重新解析并覆盖共享产物");
   forceLabel.prepend(force);
-  body.insertBefore(forceLabel, actions);
-  input.focus();
+  body.append(forceLabel, actions, status);
+
+  settings.addEventListener("click", async () => {
+    settings.disabled = true;
+    status.hidden = false;
+    status.textContent = "正在打开 Research Database → MinerU…";
+    try {
+      await host.openMineruSettings?.();
+      configured = (await host.mineruReady?.()) ?? false;
+      readiness.textContent = configured
+        ? "已读取 Research Database 的统一 MinerU 配置。"
+        : "请完成统一配置并点击连接测试，然后返回这里解析。";
+      status.textContent = "设置完成后返回本窗口，点击开始解析。";
+    } catch (e: any) {
+      status.textContent = e?.message ?? String(e);
+    } finally {
+      settings.disabled = false;
+    }
+  });
 
   go.addEventListener("click", async () => {
-    const token = input.value.trim();
-    if (!token && !configured) {
-      input.focus();
-      toast("先粘贴 API Token");
+    configured = (await host.mineruReady?.()) ?? false;
+    if (!configured) {
+      status.hidden = false;
+      status.textContent = "请先打开统一 MinerU 设置，完成配置并通过连接测试。";
       return;
     }
-    if (token) await host.setMineruToken?.(token);
     go.disabled = true;
-    input.disabled = true;
+    settings.disabled = true;
     status.hidden = false;
     status.textContent = "已提交，进度显示在工具栏；可以关闭这个窗口继续阅读。";
     try {
@@ -111,7 +110,7 @@ export async function openMineruDialog(
     } catch (e: any) {
       status.textContent = e?.message ?? String(e);
       go.disabled = false;
-      input.disabled = false;
+      settings.disabled = false;
     }
   });
 }

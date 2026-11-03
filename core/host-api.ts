@@ -205,10 +205,10 @@ export interface ZbrHost {
    * formulas become available. Progress arrives as progress messages. Absent where unsupported.
    */
   parseMineru?(forceRefresh?: boolean): Promise<void>;
-  /** Whether the selected MinerU API is configured (so parseMineru can run without asking for one first). */
+  /** Whether the shared Research Database MinerU configuration is ready. */
   mineruReady?(): Promise<boolean>;
-  /** Save the MinerU API token (same as the field in the plugin settings). */
-  setMineruToken?(token: string): Promise<void>;
+  /** Open the single MinerU configuration page owned by Research Database. */
+  openMineruSettings?(): Promise<void>;
   /** Open a web page in the user's browser. */
   openUrl?(url: string): void;
   /** Move this page from its tab to a window of its own (only where that applies). */

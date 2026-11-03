@@ -178,7 +178,6 @@ figure.fig.sized { width: min(100%, var(--fw)); aspect-ratio: var(--ar); }
 /* "MinerU 解析…" dialog */
 .mn-steps { margin: 4px 0 10px; padding-left: 1.4em; }
 .mn-steps a { color: var(--accent); }
-.mn-token { width: 100%; box-sizing: border-box; font: 13px Consolas, "Cascadia Mono", var(--ui-font); padding: 6px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--peek-btn-line); border-radius: 6px; }
 
 /* Side panel: outline, bookmarks, annotations. */
 /* The text moves right of the panel; the toolbar keeps the full width. */

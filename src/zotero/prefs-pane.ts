@@ -5,6 +5,12 @@ import { runBatch } from "../../core/translate/runner";
 import { API_EFFORTS, engineIdOf, fetchModels, LOCAL_CPA, loadProviders, newId, saveProviders, type ApiProvider } from "./api-providers";
 import { getEngine, listEngines, modelChoices, resetDetection, toolDefaults, type ModelChoice } from "./engines";
 import { getPref, setPref } from "./prefs";
+import { probeMineruApi } from "./mineru-cloud";
+import {
+  minerUConnectionOptions,
+  openResearchMineruPreferences,
+  readSharedMinerUSettings,
+} from "./mineru-settings";
 import { cacheDir } from "./store";
 
 const HTML = "http://www.w3.org/1999/xhtml";
@@ -260,8 +266,57 @@ async function refreshStatus(statusOf: Map<string, HTMLElement>) {
   return statusOf;
 }
 
+function buildMinerUControls(doc: Document) {
+  const summary = doc.getElementById("zbr-mineru-summary");
+  const result = doc.getElementById("zbr-mineru-test-result");
+  const open = doc.getElementById("zbr-mineru-open") as HTMLButtonElement | null;
+  const test = doc.getElementById("zbr-mineru-test") as HTMLButtonElement | null;
+  const refresh = () => {
+    const settings = readSharedMinerUSettings();
+    const mode = settings.mode === "self-hosted" ? "本地 Docker API" : "官方在线 API";
+    const address =
+      settings.mode === "self-hosted"
+        ? settings.selfHostedEndpoint
+        : settings.officialEndpoint || "未填写 API 地址";
+    if (summary)
+      summary.textContent =
+        "当前：" + mode + " · " + address + "；共享目录：" + settings.sharedStoreDirectory;
+    return settings;
+  };
+  refresh();
+  open?.addEventListener("command", async () => {
+    open.disabled = true;
+    if (result) result.textContent = "正在打开 Research Database → MinerU…";
+    try {
+      await openResearchMineruPreferences();
+      refresh();
+      if (result) result.textContent = "已打开统一设置；修改后可在这里直接测试当前连接。";
+    } catch (error: any) {
+      if (result) result.textContent = error?.message ?? String(error);
+    } finally {
+      open.disabled = false;
+    }
+  });
+  test?.addEventListener("command", async () => {
+    test.disabled = true;
+    test.setAttribute("aria-busy", "true");
+    if (result) result.textContent = "正在测试 MinerU 连接…";
+    try {
+      const message = await probeMineruApi(minerUConnectionOptions(refresh()));
+      if (result) result.textContent = "✓ " + message;
+    } catch (error: any) {
+      if (result) result.textContent = "✗ " + (error?.message ?? String(error));
+    } finally {
+      test.disabled = false;
+      test.removeAttribute("aria-busy");
+      refresh();
+    }
+  });
+}
+
 export function onPrefsLoad(win: Window) {
   const doc = win.document;
+  buildMinerUControls(doc);
   const cards = buildAgentCards(doc).catch((e) => Zotero.logError(e));
   doc.getElementById("zbr-detect")?.addEventListener("command", async () => {
     await cards;

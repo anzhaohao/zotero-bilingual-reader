@@ -82,94 +82,17 @@
       preference="__prefsPrefix__.glossary"
       placeholder="numerical weather prediction = 数值天气预报"
     />
-    <label><html:h3>MinerU 解析</html:h3></label>
+    <label><html:h3>MinerU 解析（统一配置）</html:h3></label>
     <description class="zbr-hint"
-      >只支持官方在线 API 和本地 Docker/self-hosted
-      API。两个插件共用下面的共享目录；已有产物会自动复用，不会重复解析。阅读页中勾选“重新解析并覆盖”才会生成新产物并安全替换旧缓存。</description
+      >唯一配置入口：Zotero Research Database → MinerU。本插件的设置页和阅读页实时读取该配置，不再保存第二份
+      API 地址或 Token。两个插件继续共用产物目录和文件锁，默认不重复解析。</description
     >
-    <html:table class="zbr-grid">
-      <html:tr
-        ><html:td>解析方式</html:td
-        ><html:td
-          ><html:select preference="__prefsPrefix__.mineruMode"
-            ><html:option value="official-api">MinerU 官方在线 API</html:option
-            ><html:option value="self-hosted"
-              >本地 Docker API</html:option
-            ></html:select
-          ></html:td
-        ></html:tr
-      >
-      <html:tr
-        ><html:td>共享产物目录</html:td
-        ><html:td
-          ><html:input
-            type="text"
-            preference="__prefsPrefix__.mineruSharedStoreDirectory" /></html:td
-      ></html:tr>
-      <html:tr
-        ><html:td>官方 API 地址</html:td
-        ><html:td
-          ><html:input
-            type="text"
-            preference="__prefsPrefix__.mineruOfficialEndpoint" /></html:td
-      ></html:tr>
-      <html:tr
-        ><html:td>官方 API Token</html:td
-        ><html:td
-          ><html:input
-            type="password"
-            preference="__prefsPrefix__.mineruOfficialToken" /></html:td
-      ></html:tr>
-      <html:tr
-        ><html:td>本地 API 地址</html:td
-        ><html:td
-          ><html:input
-            type="text"
-            preference="__prefsPrefix__.mineruSelfHostedEndpoint"
-          /><html:label
-            ><html:input
-              type="checkbox"
-              preference="__prefsPrefix__.mineruSelfHostedAutoStart"
-            />
-            自动启动 Docker 服务</html:label
-          ></html:td
-        ></html:tr
-      >
-      <html:tr
-        ><html:td>Docker 项目目录</html:td
-        ><html:td
-          ><html:input
-            type="text"
-            preference="__prefsPrefix__.mineruSelfHostedProjectDirectory" /></html:td
-      ></html:tr>
-      <html:tr
-        ><html:td>Docker CLI</html:td
-        ><html:td
-          ><html:input
-            type="text"
-            preference="__prefsPrefix__.mineruDockerExecutable" /></html:td
-      ></html:tr>
-      <html:tr
-        ><html:td>质量档</html:td
-        ><html:td
-          ><html:select preference="__prefsPrefix__.mineruTier"
-            ><html:option value="flash">flash</html:option
-            ><html:option value="basic">basic</html:option
-            ><html:option value="standard">standard</html:option
-            ><html:option value="advanced">advanced</html:option></html:select
-          >
-          <html:select preference="__prefsPrefix__.mineruMethod"
-            ><html:option value="auto">自动</html:option
-            ><html:option value="txt">文本</html:option
-            ><html:option value="ocr">OCR</html:option></html:select
-          ></html:td
-        ></html:tr
-      >
-    </html:table>
-    <description class="zbr-hint"
-      >旧的按附件目录仅作兼容读取；正式产物统一写入共享目录。旧 Token
-      偏好会继续读取，但建议填入上面的官方 API Token。</description
-    >
+    <description id="zbr-mineru-summary" class="zbr-hint">正在读取统一配置…</description>
+    <hbox align="center">
+      <button id="zbr-mineru-open" label="打开统一 MinerU 设置" />
+      <button id="zbr-mineru-test" label="测试当前连接" />
+    </hbox>
+    <description id="zbr-mineru-test-result" class="zbr-hint" />
     <hbox align="center">
       <button id="zbr-open-cache" label="打开译文缓存目录" />
     </hbox>

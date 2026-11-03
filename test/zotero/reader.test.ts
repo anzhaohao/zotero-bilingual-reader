@@ -756,28 +756,35 @@ describe("Bilingual Reader in Zotero", function () {
     }
   });
 
-  it("offers a MinerU cloud parse only where there is no MinerU result, with sign-up steps", async function () {
+  it("uses the unified Research Database MinerU settings in the parse dialog", async function () {
     const btn = rdoc.getElementById("btn-mineru")!;
     assert.isTrue(btn.hidden, "this paper already has a MinerU parse");
-    const saved = Z.Prefs.get("extensions.zotero.zbr.mineruToken", true);
-    Z.Prefs.set("extensions.zotero.zbr.mineruToken", "", true);
+    const researchPrefix = "extensions.zotero.zoteroResearchDatabase";
+    const keys = ["mineruMode", "mineruOfficialEndpoint", "mineruOfficialToken", "mineruOfficialTokenEnvironment"];
+    const saved = keys.map((key) => Z.Prefs.get(`${researchPrefix}.${key}`, true));
+    Z.Prefs.set(`${researchPrefix}.mineruMode`, "official-api", true);
+    Z.Prefs.set(`${researchPrefix}.mineruOfficialEndpoint`, "https://mineru.net/api/v4", true);
+    Z.Prefs.set(`${researchPrefix}.mineruOfficialToken`, "", true);
+    Z.Prefs.set(`${researchPrefix}.mineruOfficialTokenEnvironment`, "ZBR_TEST_MISSING_MINERU_TOKEN", true);
     try {
       btn.hidden = false;
       btn.click();
-      const box = await waitFor(() => rdoc.querySelector(".ho-panel .mn-token"), 3000, 20);
+      await waitFor(() => rdoc.querySelector(".ho-panel .mn-force"), 3000, 20);
       const panel = rdoc.querySelector(".ho-panel")!;
-      assert.include(panel.textContent!, "API 管理");
-      assert.include(panel.textContent!, "不解析也能正常阅读");
-      assert.equal((box as HTMLInputElement).type, "password");
+      assert.include(panel.textContent!, "Research Database");
+      assert.include(panel.textContent!, "不会重复解析相同 PDF");
+      assert.isNull(panel.querySelector(".mn-token"), "no second token entry");
+      const actions = panel.querySelectorAll<HTMLElement>(".ho-actions button");
+      assert.equal(actions[0].textContent, "打开统一 MinerU 设置");
       await snap("17-mineru-dialog");
-      // Without a token nothing is sent.
-      (panel.querySelector(".ho-actions button") as HTMLElement).click();
+      // Without a unified token nothing is sent.
+      actions[1].click();
       await sleep(200);
-      assert.isTrue((panel.querySelector(".ho-status") as HTMLElement).hidden);
+      assert.include((panel.querySelector(".ho-status") as HTMLElement).textContent!, "统一 MinerU 设置");
       (panel.querySelector(".ho-x") as HTMLElement).click();
     } finally {
       btn.hidden = true;
-      Z.Prefs.set("extensions.zotero.zbr.mineruToken", saved ?? "", true);
+      keys.forEach((key, index) => Z.Prefs.set(`${researchPrefix}.${key}`, saved[index] ?? "", true));
     }
   });
 

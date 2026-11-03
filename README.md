@@ -106,9 +106,9 @@
 
 有 MinerU 解析时多两样：公式按 LaTeX 排版（点击复制 LaTeX）、表格变成可选中的表格；工具栏多出“来源：MinerU”，正文里的行内公式也排版。获得解析结果有两种方式：
 
-1. **插件内调用官方在线 API**：在“设置 → 双语阅读 → MinerU”选择官方 API，填写 `https://mineru.net/api/v4` 和 API Token。双语页点“MinerU 解析…”即可上传、轮询并保存结果。
-2. **插件内调用本地 Docker API**：选择“本地 Docker API”，填写本地服务地址（默认 `http://127.0.0.1:8000`）。插件支持 MinerU 4.x v1 接口，并兼容旧版 `/file_parse`、`/tasks` 协议。
-3. **共享产物复用与覆盖**：两个插件共用 `E:\software\Zotero\mineru-shared-store`，按 PDF SHA-256 缓存。普通解析优先复用完整缓存并通过文件锁避免并发重复解析；已有结果时勾选“重新解析并覆盖共享产物”，新 ZIP 会先校验，再原子替换旧缓存，失败自动恢复旧版本。
+1. **唯一配置入口**：在“设置 → Zotero Research Database → MinerU”选择官方在线 API 或本地 Docker API，并点击“连接测试”。Bilingual Reader 的设置页和阅读弹窗都直接打开这个页面，不再保存第二份 MinerU 配置。
+2. **插件内解析**：双语页点“MinerU 解析…”即可使用同一份配置上传、轮询并保存结果。官方 API 使用已保存的地址和 Token；本地 API 支持 MinerU 4.x v1 接口，并兼容旧版 `/file_parse`、`/tasks` 协议。
+3. **共享产物复用与覆盖**：两个插件共用统一设置中的产物目录（默认 `E:\software\Zotero\mineru-shared-store`），按 PDF SHA-256 缓存。普通解析优先复用完整缓存并通过文件锁避免并发重复解析；已有结果时勾选“重新解析并覆盖共享产物”，新 ZIP 会先校验，再原子替换旧缓存，失败自动恢复旧版本。
 
    ![MinerU 解析](docs/images/17-mineru-dialog.png)
 
@@ -144,7 +144,7 @@
 
 - 译文缓存：`<Zotero 数据目录>/zotero-bilingual-reader/translations/<库ID>-<附件key>.json`，设置面板可以直接打开这个目录。阅读位置和本篇术语表也存在这里。译文按句子内容的哈希存放，Zotero 和 MinerU 两个来源里的同一句话共用译文。
 - 整篇翻译任务：`<Zotero 数据目录>/zotero-bilingual-reader/jobs/`。
-- MinerU 共享产物：`E:\software\Zotero\mineru-shared-store/papers/<PDF SHA-256>/`，索引在 `index/<库ID>-<附件key>.json`，锁在 `locks/<PDF SHA-256>.lock`。设置中的共享目录必须与 Research Database 相同。旧的 `<Zotero 数据目录>/mineru-paper-store/attachments/<附件key>/` 仅作兼容读取。
+- MinerU 共享产物：统一设置所配目录下的 `papers/<PDF SHA-256>/`，索引在 `index/<库ID>-<附件key>.json`，锁在 `locks/<PDF SHA-256>.lock`。Bilingual Reader 实时读取 Research Database 的目录设置。旧的 `<Zotero 数据目录>/mineru-paper-store/attachments/<附件key>/` 仅作兼容读取。
 - 写进 Zotero 文库的只有你主动创建的高亮和批注，和在 Zotero 阅读器里做的高亮完全一样。
 
 ## 开发

@@ -15,7 +15,13 @@ import { cleanupAgentSessions, engineConcurrency, engineConfigKey, getEngine, li
 import { getPref, setPref } from "./prefs";
 import { looseKey } from "../../core/hash";
 import { alignDocuments, type Alignment } from "../../core/align";
-import { parseMineruZip, parseOnMineruApi, type MinerUMode } from "./mineru-cloud";
+import { parseMineruZip, parseOnMineruApi } from "./mineru-cloud";
+import {
+  minerUConnectionOptions,
+  openResearchMineruPreferences,
+  readSharedMinerUSettings,
+  resolveMinerUToken,
+} from "./mineru-settings";
 import { claimSharedMinerUWork, findSharedMinerUCacheForAttachment, writeSharedMinerUResult, type SharedMinerUIdentity } from "./mineruSharedStore";
 import { TranslationStore } from "./store";
 import { clearTimeout, newAbortController, setTimeout, subtleCrypto } from "./globals";
@@ -67,8 +73,6 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
   return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
 }
-
-const DEFAULT_MINERU_SHARED_ROOT = "E:\\software\\Zotero\\mineru-shared-store";
 
 async function findContentList(directory: string): Promise<MineruContentItem[] | null> {
   const archivePath = PathUtils.join(directory, "raw", "result.zip");
@@ -149,7 +153,7 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
   let mineruItems: Promise<MineruContentItem[] | null> | null = null;
   const mineruDir = () =>
     PathUtils.join(String(getPref("mineruRoot") || "").trim() || PathUtils.join(Zotero.DataDirectory.dir, "mineru-paper-store"), "attachments", attachment.key);
-  const sharedMineruRoot = () => String(getPref("mineruSharedStoreDirectory") || "").trim() || DEFAULT_MINERU_SHARED_ROOT;
+  const sharedMineruRoot = () => readSharedMinerUSettings().sharedStoreDirectory;
   const loadMineru = () =>
     (mineruItems ??= (async () => {
       const pdfHash = await sha256Hex(await getPdfData());
@@ -827,15 +831,14 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
     },
 
     async mineruReady() {
-      const mode = String(getPref("mineruMode") || "official-api");
-      return mode === "self-hosted"
-        ? !!String(getPref("mineruSelfHostedEndpoint") || "http://127.0.0.1:8000").trim()
-        : !!String(getPref("mineruOfficialToken") || getPref("mineruToken") || "").trim();
+      const settings = readSharedMinerUSettings();
+      return settings.mode === "self-hosted"
+        ? !!settings.selfHostedEndpoint
+        : !!settings.officialEndpoint && !!resolveMinerUToken(settings);
     },
 
-    async setMineruToken(token: string) {
-      setPref("mineruOfficialToken", token.trim());
-      setPref("mineruToken", token.trim());
+    async openMineruSettings() {
+      await openResearchMineruPreferences();
     },
 
     openUrl(url: string) {
@@ -843,12 +846,10 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
     },
 
     async parseMineru(forceRefresh = false) {
-      const mode = String(getPref("mineruMode") || "official-api") as MinerUMode;
-      const endpoint = mode === "self-hosted"
-        ? String(getPref("mineruSelfHostedEndpoint") || "http://127.0.0.1:8000").trim()
-        : String(getPref("mineruOfficialEndpoint") || "https://mineru.net/api/v4").trim();
-      const token = String(getPref("mineruOfficialToken") || getPref("mineruToken") || "").trim();
-      if (mode === "official-api" && !token) throw new Error("还没有填写 MinerU 官方 API Token（设置 → 双语阅读 → MinerU）");
+      const settings = readSharedMinerUSettings();
+      const { mode, endpoint, token } = minerUConnectionOptions(settings);
+      if (mode === "official-api" && (!endpoint || !token))
+        throw new Error("请先在 Research Database → MinerU 统一设置中填写官方 API 地址和 Token");
       const pdf = await getPdfData();
       const pdfSha256 = await sha256Hex(pdf);
       const identity: SharedMinerUIdentity = { libraryID: attachment.libraryID, attachmentKey: attachment.key, pdfSha256, pdfFileName: String(attachment.attachmentFilename || attachment.key + ".pdf") };
@@ -866,11 +867,16 @@ export function createHost(attachment: any, opts: HostOptions = {}): ZoteroHost 
       try {
         const result = await parseOnMineruApi({
           mode, endpoint, token, pdf, name: identity.pdfFileName,
-          tier: String(getPref("mineruTier") || "standard"),
-          method: String(getPref("mineruMethod") || "auto") as "auto" | "txt" | "ocr",
-          autoStart: Boolean(getPref("mineruSelfHostedAutoStart")),
-          projectDirectory: String(getPref("mineruSelfHostedProjectDirectory") || "E:\\software\\DockerProject\\MinerU"),
-          dockerExecutable: String(getPref("mineruDockerExecutable") || "docker"),
+          tier: settings.tier,
+          method: settings.method,
+          modelVersion: settings.modelVersion,
+          language: settings.language,
+          backend: settings.backend,
+          enableFormula: settings.enableFormula,
+          enableTable: settings.enableTable,
+          autoStart: settings.selfHostedAutoStart,
+          projectDirectory: settings.selfHostedProjectDirectory,
+          dockerExecutable: settings.dockerExecutable,
           onProgress: (p) => emitProgress("MinerU：" + (labels[p.state] ?? p.state) + (p.total ? ` ${p.pages ?? 0}/${p.total} 页` : "") + "…"),
         });
         await writeSharedMinerUResult({ root, identity, result, sourceMode: mode, overwrite: forceRefresh });

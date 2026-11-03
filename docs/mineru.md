@@ -1,6 +1,6 @@
 # Bilingual Reader 的 MinerU 共享产物
 
-Bilingual Reader 与 Zotero Research Database 共用同一套 MinerU 产物。默认目录为 `E:\software\Zotero\mineru-shared-store`，可在两个插件的设置中改成同一个路径。
+Bilingual Reader 与 Zotero Research Database 共用同一套 MinerU 配置和产物。唯一配置入口为“设置 → Zotero Research Database → MinerU”；Bilingual Reader 只读取该配置。默认目录为 `E:\software\Zotero\mineru-shared-store`。
 
 ## 目录
 
@@ -18,7 +18,7 @@ Bilingual Reader 与 Zotero Research Database 共用同一套 MinerU 产物。�
 
 ## 解析方式
 
-设置 → 双语阅读 → MinerU 中只保留两种方式：
+统一设置中只保留两种方式，并提供“连接测试”按钮：
 
 1. **官方在线 API**：填写 `https://mineru.net/api/v4` 和 Token。PDF 会上传到 MinerU 服务器。
 2. **本地 Docker API**：填写本地 MinerU API 地址，默认 `http://127.0.0.1:8000`。支持 MinerU 4.x 的 `/v1` 接口，并兼容旧版 `/file_parse` 和 `/tasks` 协议。
